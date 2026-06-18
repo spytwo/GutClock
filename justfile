@@ -1,2 +1,2 @@
 up:
-    uv run uvicorn main:app --reload
+    uv run python main.py

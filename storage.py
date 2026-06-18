@@ -5,7 +5,6 @@ DB_PATH = "gut_clock.db"
 
 
 def init_db():
-    """Инициализация базы данных: только необходимые поля, работаем строго по UTC"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
@@ -22,14 +21,12 @@ def init_db():
     conn.close()
 
 
-# Автоматически создаем базу и таблицу при импорте
 init_db()
 
 
 def save_event(
     telegram_id: int, username: str, first_name: str, stool_type: int
 ) -> dict:
-    """Сохраняет событие в базу с фиксацией времени по UTC"""
     now_utc = datetime.now(timezone.utc).isoformat()
 
     conn = sqlite3.connect(DB_PATH)
@@ -55,7 +52,6 @@ def save_event(
 
 
 def _get_stats_by_raw_date(telegram_id: int, date_limit_iso: str = None) -> dict:
-    """Вспомогательная функция для подсчета количества записей по типам"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -84,13 +80,10 @@ def _get_stats_by_raw_date(telegram_id: int, date_limit_iso: str = None) -> dict
 
 
 def calculate_stats(telegram_id: int) -> dict:
-    """Высчитывает статистику на основе системного времени UTC"""
     now_utc = datetime.now(timezone.utc)
 
-    # Полночь текущих суток строго по UTC
     today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
 
-    # Временные лимиты для недели и месяца
     weekly_limit = (now_utc - timedelta(days=7)).isoformat()
     monthly_limit = (now_utc - timedelta(days=30)).isoformat()
 
@@ -103,7 +96,6 @@ def calculate_stats(telegram_id: int) -> dict:
 
 
 def clear_history(telegram_id: int):
-    """Полное удаление истории записей пользователя"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:

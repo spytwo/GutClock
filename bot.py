@@ -1,8 +1,7 @@
-from datetime import datetime
-
 from aiogram import Bot, Dispatcher, types
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from config import settings
 from storage import calculate_stats, clear_history, save_event
@@ -98,21 +97,27 @@ async def start(message: types.Message):
 @dp.callback_query(lambda c: c.data == "main_menu")
 async def main_menu(callback: types.CallbackQuery):
     await callback.answer()
-    await callback.message.edit_text(
-        f"🤖 Готов к работе 👇",
-        reply_markup=main_keyboard(),
-        parse_mode="Markdown",
-    )
+    if isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_text(
+                text="🤖 Готов к работе 👇", reply_markup=main_keyboard()
+            )
+        except TelegramBadRequest:
+            pass
 
 
 @dp.callback_query(lambda c: c.data == "track")
 async def track(callback: types.CallbackQuery):
     await callback.answer()
-    await callback.message.edit_text(
-        f"📝 **Фиксация состояния**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\nВыбери консистенцию стула:",
-        reply_markup=stool_keyboard(),
-        parse_mode="Markdown",
-    )
+    if isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_text(
+                text=f"📝 **Фиксация состояния**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\nВыбери консистенцию стула:",
+                reply_markup=stool_keyboard(),
+                parse_mode="Markdown",
+            )
+        except TelegramBadRequest:
+            pass
 
 
 @dp.callback_query(lambda c: c.data == "stool_help")
@@ -135,9 +140,10 @@ async def stool_help(callback: types.CallbackQuery):
         f"💡 _Если стул напоминает густую кашу, но не растекается как вода — это ближе к мягкому варианту нормы._"
     )
 
-    await callback.message.edit_text(
-        help_text, reply_markup=back_to_track_keyboard(), parse_mode="Markdown"
-    )
+    if isinstance(callback.message, Message):
+        await callback.message.edit_text(
+            text=help_text, reply_markup=back_to_track_keyboard(), parse_mode="Markdown"
+        )
 
 
 @dp.callback_query(lambda c: c.data.startswith("type_"))
@@ -149,38 +155,34 @@ async def save_event_handler(callback: types.CallbackQuery):
 
     stool_type = int(parts[1])
     telegram_id = callback.from_user.id
-
     username = callback.from_user.username
     first_name = callback.from_user.first_name
 
     try:
-        save_event(
-            telegram_id=telegram_id,
-            username=username,
-            first_name=first_name,
-            stool_type=stool_type,
-        )
+        save_event(telegram_id, username, first_name, stool_type)
 
         stool_names = {1: "Жидкий", 2: "Мягкий", 3: "Твердый"}
         current_name = stool_names.get(stool_type, "Новый")
 
-        await callback.answer("")
+        await callback.answer()
 
-        await callback.message.edit_text(
-            f"✨ **Запись сохранена: {current_name}**\n\n🤖 Жду следующую отметку 👇",
-            reply_markup=main_keyboard(),
-            parse_mode="Markdown",
-        )
+        if isinstance(callback.message, Message):
+            await callback.message.edit_text(
+                text=f"✨ **Запись сохранена**\n\n🤖 Жду следующую отметку 👇",
+                reply_markup=main_keyboard(),
+                parse_mode="Markdown",
+            )
     except Exception as e:
         print(f"Ошибка сохранения: {e}")
         await callback.answer("🚨 Ошибка записи в базу данных", show_alert=True)
-        await callback.message.edit_text(
-            f"❌ **Ошибка сохранения данных**\n"
-            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-            f"Не удалось связаться с сервером. Пожалуйста, попробуйте позже.",
-            reply_markup=main_keyboard(),
-            parse_mode="Markdown",
-        )
+        if isinstance(callback.message, Message):
+            await callback.message.edit_text(
+                text=f"❌ **Ошибка сохранения данных**\n"
+                f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                f"Не удалось связаться с сервером. Пожалуйста, попробуйте позже.",
+                reply_markup=main_keyboard(),
+                parse_mode="Markdown",
+            )
 
 
 @dp.callback_query(lambda c: c.data == "stats")
@@ -217,31 +219,34 @@ async def show_stats(callback: types.CallbackQuery):
             f"💡 _Примечание: Твой персональный ритм ЖКТ и полноценная медицинская картина сформируются после 30 дней регулярных отметок._"
         )
 
-        await callback.message.edit_text(
-            text, reply_markup=back_to_menu_keyboard(), parse_mode="Markdown"
-        )
+        if isinstance(callback.message, Message):
+            await callback.message.edit_text(
+                text=text, reply_markup=back_to_menu_keyboard(), parse_mode="Markdown"
+            )
     except Exception as e:
         print(f"Ошибка аналитики: {e}")
-        await callback.message.edit_text(
-            f"⚠️ **Не удалось загрузить отчет**\n"
-            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-            f"Повтори запрос через пару секунд.",
-            reply_markup=main_keyboard(),
-            parse_mode="Markdown",
-        )
+        if isinstance(callback.message, Message):
+            await callback.message.edit_text(
+                text=f"⚠️ **Не удалось загрузить отчет**\n"
+                f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                f"Повтори запрос через пару секунд.",
+                reply_markup=main_keyboard(),
+                parse_mode="Markdown",
+            )
 
 
 @dp.callback_query(lambda c: c.data == "confirm_clear")
 async def confirm_clear(callback: types.CallbackQuery):
     await callback.answer()
-    await callback.message.edit_text(
-        f"⚠️ **ВНИМАНИЕ!**\n"
-        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-        f"Ты действительно хочешь навсегда удалить всю историю записей?\n\n"
-        f"🛑 *Это действие необратимо. Статистика обнулится.*",
-        reply_markup=confirmation_keyboard(),
-        parse_mode="Markdown",
-    )
+    if isinstance(callback.message, Message):
+        await callback.message.edit_text(
+            text=f"⚠️ **ВНИМАНИЕ!**\n"
+            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+            f"Ты действительно хочешь навсегда удалить всю историю записей?\n\n"
+            f"🛑 *Это действие необратимо. Статистика обнулится.*",
+            reply_markup=confirmation_keyboard(),
+            parse_mode="Markdown",
+        )
 
 
 @dp.callback_query(lambda c: c.data == "true_clear")
@@ -250,18 +255,20 @@ async def true_clear(callback: types.CallbackQuery):
     try:
         clear_history(telegram_id=telegram_id)
         await callback.answer()
-        await callback.message.edit_text(
-            "🗑 История удалена",
-            reply_markup=main_keyboard(),
-            parse_mode="Markdown",
-        )
+        if isinstance(callback.message, Message):
+            await callback.message.edit_text(
+                text="🗑 История удалена",
+                reply_markup=main_keyboard(),
+                parse_mode="Markdown",
+            )
     except Exception as e:
         print(f"Ошибка при очистке БД: {e}")
         await callback.answer("🚨 Ошибка при удалении данных", show_alert=True)
-        await callback.message.edit_text(
-            f"❌ **Не удалось очистить историю**\n"
-            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-            f"Произошел системный сбой базы данных.",
-            reply_markup=main_keyboard(),
-            parse_mode="Markdown",
-        )
+        if isinstance(callback.message, Message):
+            await callback.message.edit_text(
+                text=f"❌ **Не удалось очистить историю**\n"
+                f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                f"Произошел системный сбой базы данных.",
+                reply_markup=main_keyboard(),
+                parse_mode="Markdown",
+            )
