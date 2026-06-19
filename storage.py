@@ -1,7 +1,10 @@
+import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-DB_PATH = "gut_clock.db"
+OS_DATA_DIR = "data"
+os.makedirs(OS_DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(OS_DATA_DIR, "gut_clock.db")
 
 
 def init_db():
