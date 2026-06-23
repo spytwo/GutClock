@@ -355,7 +355,7 @@ async def export_data_handler(callback: types.CallbackQuery):
             name = stool_names.get(stool_type, "Неизвестно")
             file_in_memory.write(f"{formatted_date:<22} | {name}\n")
 
-        bytes_file = io.BytesIO(file_in_memory.getvalue().encode("utf-8"))
+        bytes_file = io.BytesIO(file_in_memory.getvalue().encode("utf-8-sig"))
         document = BufferedInputFile(bytes_file.read(), filename="my_gut_report.txt")
 
         await callback.message.answer_document(
