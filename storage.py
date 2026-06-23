@@ -6,11 +6,15 @@ OS_DATA_DIR = "data"
 os.makedirs(OS_DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(OS_DATA_DIR, "gut_clock.db")
 
+# Екатеринбург (UTC+5)
+LOCAL_TZ = timezone(timedelta(hours=5))
+
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS stool_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id INTEGER NOT NULL,
@@ -19,7 +23,8 @@ def init_db():
             stool_type INTEGER NOT NULL,
             created_at TEXT NOT NULL
         )
-    """)
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -30,31 +35,28 @@ init_db()
 def save_event(
     telegram_id: int, username: str, first_name: str, stool_type: int
 ) -> dict:
-    now_utc = datetime.now(timezone.utc).isoformat()
+    # Записываем местное время (Екб)
+    now_local = datetime.now(LOCAL_TZ).isoformat()
 
     conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    try:
+    with conn:  # Менеджер контекста автоматически сделает commit() при успехе
+        cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO stool_events (telegram_id, username, first_name, stool_type, created_at) VALUES (?, ?, ?, ?, ?)",
-            (telegram_id, username, first_name, stool_type, now_utc),
+            "INSERT INTO stool_events (telegram_id, username, first_name, "
+            "stool_type, created_at) VALUES (?, ?, ?, ?, ?)",
+            (telegram_id, username, first_name, stool_type, now_local),
         )
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
+    conn.close()
 
     return {
         "telegram_id": telegram_id,
         "username": username,
         "stool_type": stool_type,
-        "created_at": now_utc,
+        "created_at": now_local,
     }
 
 
-def _get_stats_by_raw_date(telegram_id: int, date_limit_iso: str = None) -> dict:
+def _get_stats_by_raw_date(telegram_id: int, date_limit_iso: str | None = None) -> dict:
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -83,12 +85,15 @@ def _get_stats_by_raw_date(telegram_id: int, date_limit_iso: str = None) -> dict
 
 
 def calculate_stats(telegram_id: int) -> dict:
-    now_utc = datetime.now(timezone.utc)
+    # Получаем объект datetime для Екб (без isoformat на этом этапе)
+    now_local = datetime.now(LOCAL_TZ)
 
-    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    today_start = now_local.replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
 
-    weekly_limit = (now_utc - timedelta(days=7)).isoformat()
-    monthly_limit = (now_utc - timedelta(days=30)).isoformat()
+    weekly_limit = (now_local - timedelta(days=7)).isoformat()
+    monthly_limit = (now_local - timedelta(days=30)).isoformat()
 
     return {
         "today": _get_stats_by_raw_date(telegram_id, today_start),
@@ -100,12 +105,20 @@ def calculate_stats(telegram_id: int) -> dict:
 
 def clear_history(telegram_id: int):
     conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    try:
+    with conn:
+        cursor = conn.cursor()
         cursor.execute("DELETE FROM stool_events WHERE telegram_id = ?", (telegram_id,))
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
+    conn.close()
+
+
+def get_all_events(telegram_id: int) -> list:
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT stool_type, created_at FROM stool_events WHERE telegram_id = ? "
+        "ORDER BY created_at DESC",
+        (telegram_id,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows

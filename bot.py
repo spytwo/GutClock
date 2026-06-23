@@ -1,10 +1,25 @@
+import io
+from contextlib import suppress
+from datetime import datetime
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    BufferedInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
 from config import settings
-from storage import calculate_stats, clear_history, save_event
+from storage import (
+    LOCAL_TZ,
+    calculate_stats,
+    clear_history,
+    get_all_events,
+    save_event,
+)
 
 bot = Bot(token=settings.BOT_TOKEN)
 dp = Dispatcher()
@@ -60,6 +75,11 @@ def back_to_menu_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
+                    text="📄 Подробный отчет", callback_data="export_data"
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="🗑 Очистить историю", callback_data="confirm_clear"
                 )
             ],
@@ -86,7 +106,8 @@ async def start(message: types.Message):
     first_name = message.from_user.first_name
     await message.answer(
         f"👋 **Привет, {first_name}!**\n\n"
-        f"Я твой личный трекер пищеварения. Помогу следить за здоровьем кишечника и вовремя заметить отклонения. 🩺\n\n"
+        f"Я твой личный трекер пищеварения. Помогу следить за "
+        f"здоровьем кишечника и вовремя заметить отклонения. 🩺\n\n"
         f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
         f"🤖 Готов к работе 👇",
         reply_markup=main_keyboard(),
@@ -98,26 +119,26 @@ async def start(message: types.Message):
 async def main_menu(callback: types.CallbackQuery):
     await callback.answer()
     if isinstance(callback.message, Message):
-        try:
+        with suppress(TelegramBadRequest):
             await callback.message.edit_text(
-                text="🤖 Готов к работе 👇", reply_markup=main_keyboard()
+                text=("🤖 **Главное меню**\n\nВыбери необходимое действие ниже 👇"),
+                reply_markup=main_keyboard(),
+                parse_mode="Markdown",
             )
-        except TelegramBadRequest:
-            pass
 
 
 @dp.callback_query(lambda c: c.data == "track")
 async def track(callback: types.CallbackQuery):
     await callback.answer()
     if isinstance(callback.message, Message):
-        try:
+        with suppress(TelegramBadRequest):
             await callback.message.edit_text(
-                text=f"📝 **Фиксация состояния**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\nВыбери консистенцию стула:",
+                text=(
+                    "💩 **Каким был твой стул в этот раз?**\n\nВыбери тип консистенции:"
+                ),
                 reply_markup=stool_keyboard(),
                 parse_mode="Markdown",
             )
-        except TelegramBadRequest:
-            pass
 
 
 @dp.callback_query(lambda c: c.data == "stool_help")
@@ -125,25 +146,34 @@ async def stool_help(callback: types.CallbackQuery):
     await callback.answer()
 
     help_text = (
-        f"📖 **СПРАВОЧНИК КОНСИСТЕНЦИИ**\n"
-        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n\n"
-        f"☁️ **МЯГКИЙ (Близко к норме)**\n"
-        f"• **Форма:** Оформленная колбаска (гладкая или с трещинками), либо мягкий, слегка рыхлый стул. Допустима густая каша с границами.\n"
-        f"• **Статус:** В целом норма.\n\n"
-        f"💧 **ЖИДКИЙ**\n"
-        f"• **Форма:** Неоформленная кашица (как суп) или полностью водянистый стул.\n"
-        f"• **Статус:** Быстрое прохождение по кишечнику — вода не успела всосаться.\n\n"
-        f"🧱 **ТВЕРДЫЙ**\n"
-        f"• **Форма:** Отдельные жесткие комки (как орехи) или очень плотная, сухая колбаса.\n"
-        f"• **Статус:** Медленное прохождение — часто не хватает воды или клетчатки.\n\n"
-        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-        f"💡 _Если стул напоминает густую кашу, но не растекается как вода — это ближе к мягкому варианту нормы._"
+        "📖 **СПРАВОЧНИК КОНСИСТЕНЦИИ**\n"
+        "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n\n"
+        "☁️ **МЯГКИЙ (Близко к норме)**\n"
+        "• **Форма:** Оформленная колбаска (гладкая или с трещинками), "
+        "либо мягкий, слегка рыхлый стул. Допустима густая каша с границами.\n"
+        "• **Статус:** В целом норма.\n\n"
+        "💧 **ЖИДКИЙ**\n"
+        "• **Форма:** Неоформленная кашица (как суп) или полностью "
+        "водянистый стул.\n"
+        "• **Статус:** Быстрое прохождение по кишечнику — вода не "
+        "успела всосаться.\n\n"
+        "🧱 **ТВЕРДЫЙ**\n"
+        "• **Форма:** Отдельные жесткие комки (как орехи) или очень "
+        "плотная, сухая колбаса.\n"
+        "• **Статус:** Медленное прохождение — часто не хватает воды "
+        "или клетчатки.\n\n"
+        "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        "💡 _Если стул напоминает густую кашу, но не растекается "
+        "как вода — это ближе к мягкому варианту нормы._"
     )
 
     if isinstance(callback.message, Message):
-        await callback.message.edit_text(
-            text=help_text, reply_markup=back_to_track_keyboard(), parse_mode="Markdown"
-        )
+        with suppress(TelegramBadRequest):
+            await callback.message.edit_text(
+                text=help_text,
+                reply_markup=back_to_track_keyboard(),
+                parse_mode="Markdown",
+            )
 
 
 @dp.callback_query(lambda c: c.data.startswith("type_"))
@@ -160,29 +190,29 @@ async def save_event_handler(callback: types.CallbackQuery):
 
     try:
         save_event(telegram_id, username, first_name, stool_type)
-
-        stool_names = {1: "Жидкий", 2: "Мягкий", 3: "Твердый"}
-        current_name = stool_names.get(stool_type, "Новый")
-
         await callback.answer()
 
         if isinstance(callback.message, Message):
-            await callback.message.edit_text(
-                text=f"✨ **Запись сохранена**\n\n🤖 Жду следующую отметку 👇",
-                reply_markup=main_keyboard(),
-                parse_mode="Markdown",
-            )
+            with suppress(TelegramBadRequest):
+                await callback.message.edit_text(
+                    text=("✨ **Запись сохранена**\n\n🤖 Жду следующую отметку 👇"),
+                    reply_markup=main_keyboard(),
+                    parse_mode="Markdown",
+                )
     except Exception as e:
         print(f"Ошибка сохранения: {e}")
         await callback.answer("🚨 Ошибка записи в базу данных", show_alert=True)
         if isinstance(callback.message, Message):
-            await callback.message.edit_text(
-                text=f"❌ **Ошибка сохранения данных**\n"
-                f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-                f"Не удалось связаться с сервером. Пожалуйста, попробуйте позже.",
-                reply_markup=main_keyboard(),
-                parse_mode="Markdown",
-            )
+            with suppress(TelegramBadRequest):
+                await callback.message.edit_text(
+                    text=(
+                        "❌ **Ошибка сохранения данных**\n"
+                        "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                        "Не удалось связаться с сервером. Попробуй позже."
+                    ),
+                    reply_markup=main_keyboard(),
+                    parse_mode="Markdown",
+                )
 
 
 @dp.callback_query(lambda c: c.data == "stats")
@@ -215,38 +245,49 @@ async def show_stats(callback: types.CallbackQuery):
             f"{render_pro_block('📆 **За последние 30 дней**', stats['monthly'])}\n\n"
             f"{render_pro_block('📈 **За всё время**', stats['total'])}\n\n"
             f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-            f"🧬 *Индекс нормы: Идеальным считается преобладание мягкого типа (☁️).*\n\n"
-            f"💡 _Примечание: Твой персональный ритм ЖКТ и полноценная медицинская картина сформируются после 30 дней регулярных отметок._"
+            f"🧬 *Индекс нормы: Идеальным считается преобладание мягкого "
+            f"типа (☁️).*\n\n"
+            f"💡 _Примечание: Твой персональный ритм ЖКТ и полноценная "
+            f"медицинская картина сформируются после 30 дней регулярных отметок._"
         )
 
         if isinstance(callback.message, Message):
-            await callback.message.edit_text(
-                text=text, reply_markup=back_to_menu_keyboard(), parse_mode="Markdown"
-            )
+            with suppress(TelegramBadRequest):
+                await callback.message.edit_text(
+                    text=text,
+                    reply_markup=back_to_menu_keyboard(),
+                    parse_mode="Markdown",
+                )
     except Exception as e:
         print(f"Ошибка аналитики: {e}")
         if isinstance(callback.message, Message):
-            await callback.message.edit_text(
-                text=f"⚠️ **Не удалось загрузить отчет**\n"
-                f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-                f"Повтори запрос через пару секунд.",
-                reply_markup=main_keyboard(),
-                parse_mode="Markdown",
-            )
+            with suppress(TelegramBadRequest):
+                await callback.message.edit_text(
+                    text=(
+                        "⚠️ **Не удалось загрузить отчет**\n"
+                        "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                        "Повтори запрос через пару секунд."
+                    ),
+                    reply_markup=main_keyboard(),
+                    parse_mode="Markdown",
+                )
 
 
 @dp.callback_query(lambda c: c.data == "confirm_clear")
 async def confirm_clear(callback: types.CallbackQuery):
     await callback.answer()
     if isinstance(callback.message, Message):
-        await callback.message.edit_text(
-            text=f"⚠️ **ВНИМАНИЕ!**\n"
-            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-            f"Ты действительно хочешь навсегда удалить всю историю записей?\n\n"
-            f"🛑 *Это действие необратимо. Статистика обнулится.*",
-            reply_markup=confirmation_keyboard(),
-            parse_mode="Markdown",
-        )
+        with suppress(TelegramBadRequest):
+            await callback.message.edit_text(
+                text=(
+                    "⚠️ **ВНИМАНИЕ!**\n"
+                    "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                    "Ты действительно хочешь навсегда удалить всю историю записей?\n\n"
+                    "🛑 *Это действие необратимо. Статистика обнулится.*"
+                ),
+                reply_markup=confirmation_keyboard(),
+                parse_mode="Markdown",
+            )
 
 
 @dp.callback_query(lambda c: c.data == "true_clear")
@@ -256,19 +297,73 @@ async def true_clear(callback: types.CallbackQuery):
         clear_history(telegram_id=telegram_id)
         await callback.answer()
         if isinstance(callback.message, Message):
-            await callback.message.edit_text(
-                text="🗑 История удалена",
-                reply_markup=main_keyboard(),
-                parse_mode="Markdown",
-            )
+            with suppress(TelegramBadRequest):
+                await callback.message.edit_text(
+                    text="🗑 История удалена",
+                    reply_markup=main_keyboard(),
+                    parse_mode="Markdown",
+                )
     except Exception as e:
         print(f"Ошибка при очистке БД: {e}")
         await callback.answer("🚨 Ошибка при удалении данных", show_alert=True)
         if isinstance(callback.message, Message):
-            await callback.message.edit_text(
-                text=f"❌ **Не удалось очистить историю**\n"
-                f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-                f"Произошел системный сбой базы данных.",
-                reply_markup=main_keyboard(),
-                parse_mode="Markdown",
-            )
+            with suppress(TelegramBadRequest):
+                await callback.message.edit_text(
+                    text=(
+                        "❌ **Не удалось очистить историю**\n"
+                        "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                        "Произошел системный сбой базы данных."
+                    ),
+                    reply_markup=main_keyboard(),
+                    parse_mode="Markdown",
+                )
+
+
+@dp.callback_query(lambda c: c.data == "export_data")
+async def export_data_handler(callback: types.CallbackQuery):
+    await callback.answer()
+    telegram_id = callback.from_user.id
+
+    try:
+        rows = get_all_events(telegram_id)
+
+        if not rows:
+            await callback.message.answer("У тебя пока нет записей для выгрузки 🤷‍♂️")
+            return
+
+        file_in_memory = io.StringIO()
+
+        file_in_memory.write("📊 ПОДРОБНЫЙ ОТЧЕТ О СОСТОЯНИИ ЖКТ\n")
+
+        gen_time = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M")
+        file_in_memory.write(f"Сгенерирован: {gen_time} (Екатеринбург, UTC+5)\n")
+
+        file_in_memory.write("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n\n")
+
+        file_in_memory.write(f"{'Дата и время (Екб)':<22} | {'Тип стула'}\n")
+        file_in_memory.write("-------------------------------------\n")
+
+        stool_names = {1: "💧 Жидкий", 2: "☁️ Мягкий", 3: "🧱 Твердый"}
+
+        for stool_type, created_at in rows:
+            try:
+                dt = datetime.fromisoformat(created_at)
+                formatted_date = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                formatted_date = created_at
+
+            name = stool_names.get(stool_type, "Неизвестно")
+            file_in_memory.write(f"{formatted_date:<22} | {name}\n")
+
+        bytes_file = io.BytesIO(file_in_memory.getvalue().encode("utf-8"))
+        document = BufferedInputFile(bytes_file.read(), filename="my_gut_report.txt")
+
+        await callback.message.answer_document(
+            document, caption="Вот твой подробный отчет за всё время 📄"
+        )
+
+    except Exception as e:
+        print(f"Ошибка формирования отчета: {e}")
+        await callback.message.answer(
+            "❌ Произошла ошибка при формировании файла. Попробуй позже."
+        )
