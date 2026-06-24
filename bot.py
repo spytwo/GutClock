@@ -222,6 +222,7 @@ async def show_stats(callback: types.CallbackQuery):
 
     try:
         stats = calculate_stats(telegram_id)
+        days_count = stats.get("days_count", 0)
 
         def render_pro_block(title, data_dict):
             total = data_dict.get("count", 0)
@@ -237,8 +238,14 @@ async def show_stats(callback: types.CallbackQuery):
                 f"`🧱 Твердый ` `{t3:<2}` {generate_progress_bar(t3, total)}"
             )
 
+        if days_count == 0:
+            days_text = "📅 **Ты еще не сделал ни одной отметки**"
+        else:
+            days_text = f"📅 **Сегодня {days_count}-й день отметок**"
+
         text = (
             f"📊 **АНАЛИТИКА ЗДОРОВЬЯ**\n"
+            f"{days_text}\n"
             f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n\n"
             f"{render_pro_block('☀️ **За сегодня**', stats['today'])}\n\n"
             f"{render_pro_block('📅 **За последние 7 дней**', stats['weekly'])}\n\n"

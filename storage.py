@@ -35,11 +35,10 @@ init_db()
 def save_event(
     telegram_id: int, username: str, first_name: str, stool_type: int
 ) -> dict:
-    # Записываем местное время (Екб)
     now_local = datetime.now(LOCAL_TZ).isoformat()
 
     conn = sqlite3.connect(DB_PATH)
-    with conn:  # Менеджер контекста автоматически сделает commit() при успехе
+    with conn:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO stool_events (telegram_id, username, first_name, "
@@ -84,8 +83,25 @@ def _get_stats_by_raw_date(telegram_id: int, date_limit_iso: str | None = None) 
     return {"count": total_count, "types": result_types}
 
 
+def _get_unique_days_count(telegram_id: int) -> int:
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    query = "SELECT MIN(date(created_at)) FROM stool_events WHERE telegram_id = ?"
+    cursor.execute(query, (telegram_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row or row[0] is None:
+        return 0
+    first_date = datetime.strptime(row[0], "%Y-%m-%d").date()
+    today_date = datetime.now(LOCAL_TZ).date()
+    days_streak = (today_date - first_date).days + 1
+
+    return days_streak
+
+
 def calculate_stats(telegram_id: int) -> dict:
-    # Получаем объект datetime для Екб (без isoformat на этом этапе)
     now_local = datetime.now(LOCAL_TZ)
 
     today_start = now_local.replace(
@@ -100,6 +116,7 @@ def calculate_stats(telegram_id: int) -> dict:
         "weekly": _get_stats_by_raw_date(telegram_id, weekly_limit),
         "monthly": _get_stats_by_raw_date(telegram_id, monthly_limit),
         "total": _get_stats_by_raw_date(telegram_id, None),
+        "days_count": _get_unique_days_count(telegram_id),
     }
 
 
